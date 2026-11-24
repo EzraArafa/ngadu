@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -12,9 +13,18 @@ import 'screens/home_screen.dart';
 import 'screens/complaint_form.dart';
 import 'screens/my_complaints_screen.dart';
 import 'screens/complaint_detail.dart';
+import 'theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+      statusBarBrightness: Brightness.light,
+    ),
+  );
 
   await initializeDateFormatting('id_ID', null);
 
@@ -41,10 +51,7 @@ class NgaduApp extends StatelessWidget {
       ],
       child: MaterialApp(
         title: 'Ngadu',
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-          useMaterial3: true,
-        ),
+        theme: AppTheme.lightTheme,
         initialRoute: '/',
         routes: {
           '/': (c) => const SplashScreen(),
@@ -53,7 +60,6 @@ class NgaduApp extends StatelessWidget {
           '/form': (c) => const ComplaintFormScreen(),
           '/my': (c) => const MyComplaintsScreen(),
           '/detail': (c) => const ComplaintDetailScreen(),
-          // Admin status modal dibuka via showDialog, tidak ada route terpisah.
         },
         debugShowCheckedModeBanner: false,
       ),

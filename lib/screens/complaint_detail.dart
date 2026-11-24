@@ -7,10 +7,12 @@ import 'package:provider/provider.dart';
 import '../models/complaint.dart';
 import '../providers/auth_provider.dart';
 import '../providers/complaint_provider.dart';
+import '../theme/app_theme.dart';
+import '../widgets/complaint_card.dart';
 import 'admin_status_modal.dart';
 
-/// S-06 Detail Aduan: foto, mini-map, linimasa status, bukti perbaikan,
-/// serta aksi kondisional sesuai role (Hapus / Update Status).
+/// S-06 Detail Aduan: foto, linimasa status, catatan & bukti perbaikan,
+/// mini-map GPS, serta aksi kondisional sesuai role (Hapus / Update Status).
 class ComplaintDetailScreen extends StatelessWidget {
   const ComplaintDetailScreen({super.key});
 
@@ -18,205 +20,389 @@ class ComplaintDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final complaint = context.watch<ComplaintProvider>().selected;
     final user = context.read<AuthController>().user;
+    final textTheme = Theme.of(context).textTheme;
 
     if (complaint == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Detail Aduan')),
-        body: const Center(child: Text('Aduan tidak ditemukan.')),
+        body: Center(
+          child: Text(
+            'Data aduan tidak ditemukan.',
+            style: textTheme.bodyMedium,
+          ),
+        ),
       );
     }
 
     final canDelete = user != null && complaint.canDelete(user.id);
     final isAdmin = user?.isAdmin ?? false;
+    final hasAdminNote =
+        complaint.adminNote != null && complaint.adminNote!.trim().isNotEmpty;
+    final hasProofPhoto = complaint.proofPhotoUrl != null &&
+        complaint.proofPhotoUrl!.trim().isNotEmpty;
+    final locationText = complaint.floorRoom.trim().isNotEmpty
+        ? '${complaint.building} • ${complaint.floorRoom}'
+        : complaint.building;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Detail Aduan'),
         actions: [
           if (canDelete)
-            IconButton(
-              icon: const Icon(Icons.delete_outline),
-              tooltip: 'Hapus Aduan',
-              onPressed: () => _confirmDelete(context, complaint.id),
+            Padding(
+              padding: const EdgeInsets.only(right: AppSpacing.sm),
+              child: IconButton(
+                icon: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: AppColors.dangerText,
+                ),
+                tooltip: 'Hapus Aduan',
+                onPressed: () => _confirmDelete(context, complaint.id),
+              ),
             ),
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          AppSpacing.lg,
+          AppSpacing.lg,
+          AppSpacing.xxl,
+        ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Foto bukti laporan
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.network(
-                complaint.photoUrl,
-                width: double.infinity,
-                height: 220,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => Container(
-                  height: 220,
-                  color: Colors.grey.shade200,
-                  child: const Icon(Icons.broken_image, size: 48),
-                ),
+            // 1. Foto Bukti Laporan (dapat diketuk untuk diperbesar)
+            _ZoomablePhotoBanner(
+              imageUrl: complaint.photoUrl,
+              badgeLabel: 'Foto Bukti Laporan',
+              onTap: () => _showFullImage(
+                context,
+                imageUrl: complaint.photoUrl,
+                title: 'Foto Bukti Laporan',
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.lg),
 
-            // Kategori + Status
-            Row(
-              children: [
-                _InfoChip(label: complaint.category.label),
-                const SizedBox(width: 8),
-                _StatusChip(status: complaint.status),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            Text(
-              complaint.title,
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${complaint.building} - ${complaint.floorRoom}',
-              style: const TextStyle(fontSize: 15, color: Colors.black87),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              complaint.description,
-              style: const TextStyle(fontSize: 15, height: 1.5),
-            ),
-            const SizedBox(height: 12),
-
-            Text(
-              'Dilaporkan oleh ${complaint.reporterName} '
-              'pada ${DateFormat('dd MMM yyyy', 'id').format(complaint.createdAt)}',
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
-            ),
-            const Divider(height: 28),
-
-            // Peta titik koordinat GPS
-            const Text(
-              'Lokasi Peta',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 180,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: FlutterMap(
-                  options: MapOptions(
-                    initialCenter: LatLng(complaint.latitude, complaint.longitude),
-                    initialZoom: 16,
+            // 2. Kartu Informasi Utama Aduan
+            _DetailSectionCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: AppSpacing.sm,
+                    runSpacing: AppSpacing.sm,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      ComplaintStatusBadge(status: complaint.status),
+                      _CategoryBadge(category: complaint.category),
+                    ],
                   ),
-                  children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.example.ngadu',
+                  const SizedBox(height: AppSpacing.md),
+                  Text(
+                    complaint.title,
+                    style: textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+
+                  // Sorotan Lokasi Gedung & Ruangan
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md,
+                      vertical: 10,
                     ),
-                    MarkerLayer(
-                      markers: [
-                        Marker(
-                          point: LatLng(
-                            complaint.latitude,
-                            complaint.longitude,
-                          ),
-                          width: 32,
-                          height: 32,
-                          child: const Icon(
-                            Icons.location_on,
-                            color: Colors.red,
-                            size: 32,
+                    decoration: BoxDecoration(
+                      color: AppColors.primarySoft,
+                      borderRadius: BorderRadius.circular(AppRadius.input),
+                      border: Border.all(color: AppColors.primaryBorder),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.location_on_rounded,
+                          size: 18,
+                          color: AppColors.primary,
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            locationText,
+                            style: textTheme.titleSmall?.copyWith(
+                              color: AppColors.primaryDark,
+                            ),
                           ),
                         ),
                       ],
                     ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+
+                  Text(
+                    'Deskripsi Kerusakan',
+                    style: textTheme.labelMedium?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    complaint.description,
+                    style: textTheme.bodyLarge,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  const Divider(),
+                  const SizedBox(height: AppSpacing.md),
+
+                  // Info Pelapor & Tanggal
+                  Row(
+                    children: [
+                      Container(
+                        width: 34,
+                        height: 34,
+                        decoration: const BoxDecoration(
+                          color: AppColors.surfaceSubtle,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.person_outline_rounded,
+                          size: 18,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              complaint.reporterName,
+                              style: textTheme.titleSmall,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              'Dilaporkan ${DateFormat('dd MMM yyyy, HH:mm', 'id_ID').format(complaint.createdAt)}',
+                              style: textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+
+            // 3. Kartu Linimasa Penanganan
+            _DetailSectionCard(
+              title: 'Linimasa Penanganan',
+              icon: Icons.timeline_rounded,
+              child: _VerticalTimeline(status: complaint.status),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+
+            // 4. Kartu Tindak Lanjut Petugas (Catatan / Bukti Perbaikan)
+            if (hasAdminNote || hasProofPhoto) ...[
+              _DetailSectionCard(
+                title: 'Tindak Lanjut Petugas',
+                icon: Icons.engineering_rounded,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (hasAdminNote) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(AppSpacing.md),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceSubtle,
+                          borderRadius: BorderRadius.circular(AppRadius.input),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.notes_rounded,
+                              size: 18,
+                              color: AppColors.primary,
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            Expanded(
+                              child: Text(
+                                complaint.adminNote!,
+                                style: textTheme.bodyMedium?.copyWith(
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (hasProofPhoto) const SizedBox(height: AppSpacing.md),
+                    ],
+                    if (hasProofPhoto) ...[
+                      Text(
+                        'Foto Bukti Perbaikan',
+                        style: textTheme.labelMedium?.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      _ZoomablePhotoBanner(
+                        imageUrl: complaint.proofPhotoUrl!,
+                        height: 190,
+                        badgeLabel: 'Bukti Selesai',
+                        badgeColor: AppColors.successText,
+                        badgeBg: AppColors.successBg,
+                        badgeBorder: AppColors.successBorder,
+                        onTap: () => _showFullImage(
+                          context,
+                          imageUrl: complaint.proofPhotoUrl!,
+                          title: 'Foto Bukti Perbaikan',
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '${complaint.latitude.toStringAsFixed(5)}, '
-              '${complaint.longitude.toStringAsFixed(5)}',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-            ),
-            const Divider(height: 28),
-
-            // Linimasa status
-            const Text(
-              'Linimasa Penanganan',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            _Timeline(status: complaint.status),
-            const SizedBox(height: 16),
-
-            // Catatan admin
-            if (complaint.adminNote != null &&
-                complaint.adminNote!.isNotEmpty) ...[
-              const Text(
-                'Catatan Petugas',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 6),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(complaint.adminNote!),
-              ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.lg),
             ],
 
-            // Foto bukti perbaikan
-            if (complaint.proofPhotoUrl != null &&
-                complaint.proofPhotoUrl!.isNotEmpty) ...[
-              const Text(
-                'Foto Bukti Perbaikan',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            // 5. Kartu Titik Koordinat Peta GPS
+            _DetailSectionCard(
+              title: 'Titik Lokasi GPS',
+              icon: Icons.map_outlined,
+              trailing: Text(
+                '${complaint.latitude.toStringAsFixed(5)}, ${complaint.longitude.toStringAsFixed(5)}',
+                style: textTheme.bodySmall?.copyWith(
+                  fontFamily: 'monospace',
+                  color: AppColors.textSecondary,
+                ),
               ),
-              const SizedBox(height: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  complaint.proofPhotoUrl!,
-                  width: double.infinity,
-                  height: 200,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => Container(
-                    height: 200,
-                    color: Colors.grey.shade200,
-                    child: const Icon(Icons.broken_image, size: 48),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.input),
+                child: SizedBox(
+                  height: 180,
+                  child: FlutterMap(
+                    options: MapOptions(
+                      initialCenter:
+                          LatLng(complaint.latitude, complaint.longitude),
+                      initialZoom: 16,
+                    ),
+                    children: [
+                      TileLayer(
+                        urlTemplate:
+                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        userAgentPackageName: 'com.example.ngadu',
+                      ),
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: LatLng(
+                              complaint.latitude,
+                              complaint.longitude,
+                            ),
+                            width: 36,
+                            height: 36,
+                            child: const Icon(
+                              Icons.location_on_rounded,
+                              color: AppColors.dangerText,
+                              size: 36,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
-            ],
+            ),
           ],
         ),
       ),
       bottomNavigationBar: isAdmin
-          ? SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                child: FilledButton.icon(
-                  onPressed: () => _openAdminModal(context, complaint),
-                  icon: const Icon(Icons.edit_document),
-                  label: const Text('UPDATE STATUS'),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+          ? Container(
+              decoration: const BoxDecoration(
+                color: AppColors.surface,
+                border: Border(
+                  top: BorderSide(color: AppColors.border, width: 1),
+                ),
+              ),
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    AppSpacing.md,
+                    AppSpacing.lg,
+                    AppSpacing.md,
+                  ),
+                  child: FilledButton.icon(
+                    onPressed: () => _openAdminModal(context),
+                    icon: const Icon(Icons.edit_note_rounded, size: 22),
+                    label: const Text('Update Status Aduan'),
                   ),
                 ),
               ),
             )
           : null,
+    );
+  }
+
+  void _showFullImage(
+    BuildContext context, {
+    required String imageUrl,
+    required String title,
+  }) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog.fullscreen(
+        backgroundColor: Colors.black,
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.8,
+                maxScale: 4.0,
+                child: Image.network(
+                  imageUrl,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, _, _) => const Icon(
+                    Icons.broken_image_outlined,
+                    color: Colors.white54,
+                    size: 56,
+                  ),
+                ),
+              ),
+            ),
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                child: Row(
+                  children: [
+                    IconButton.filled(
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.black54,
+                        foregroundColor: Colors.white,
+                      ),
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -226,7 +412,7 @@ class ComplaintDetailScreen extends StatelessWidget {
       builder: (ctx) => AlertDialog(
         title: const Text('Hapus Aduan?'),
         content: const Text(
-          'Aduan yang masih menunggu verifikasi akan dihapus permanen.',
+          'Aduan yang masih menunggu verifikasi akan dihapus secara permanen.',
         ),
         actions: [
           TextButton(
@@ -235,6 +421,10 @@ class ComplaintDetailScreen extends StatelessWidget {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(96, 42),
+              backgroundColor: AppColors.dangerText,
+            ),
             child: const Text('Hapus'),
           ),
         ],
@@ -257,10 +447,11 @@ class ComplaintDetailScreen extends StatelessWidget {
     }
   }
 
-  void _openAdminModal(BuildContext context, Complaint complaint) {
-    showModalBottomSheet(
+  void _openAdminModal(BuildContext context) {
+    showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      showDragHandle: true,
       builder: (_) => ChangeNotifierProvider.value(
         value: context.read<ComplaintProvider>(),
         child: const AdminStatusModal(),
@@ -269,106 +460,329 @@ class ComplaintDetailScreen extends StatelessWidget {
   }
 }
 
-class _StatusChip extends StatelessWidget {
-  const _StatusChip({required this.status});
-  final ComplaintStatus status;
+class _DetailSectionCard extends StatelessWidget {
+  const _DetailSectionCard({
+    required this.child,
+    this.title,
+    this.icon,
+    this.trailing,
+  });
+
+  final Widget child;
+  final String? title;
+  final IconData? icon;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
-    final color = switch (status) {
-      ComplaintStatus.menunggu => const Color(0xFF8D5E00),
-      ComplaintStatus.diproses => const Color(0xFF0D47A1),
-      ComplaintStatus.selesai => const Color(0xFF1B5E20),
-      ComplaintStatus.ditolak => const Color(0xFFB71C1C),
-    };
+    final textTheme = Theme.of(context).textTheme;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: AppColors.border, width: 1),
       ),
-      child: Text(
-        status.label,
-        style: TextStyle(color: color, fontWeight: FontWeight.w600),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (title != null) ...[
+            Row(
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, size: 18, color: AppColors.primary),
+                  const SizedBox(width: AppSpacing.sm),
+                ],
+                Expanded(
+                  child: Text(title!, style: textTheme.titleSmall),
+                ),
+                ?trailing,
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+          ],
+          child,
+        ],
       ),
     );
   }
 }
 
-class _InfoChip extends StatelessWidget {
-  const _InfoChip({required this.label});
-  final String label;
+class _CategoryBadge extends StatelessWidget {
+  const _CategoryBadge({required this.category});
+
+  final ComplaintCategory category;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: Colors.blue.shade50,
-        borderRadius: BorderRadius.circular(20),
+        color: AppColors.surfaceSubtle,
+        borderRadius: BorderRadius.circular(AppRadius.badge),
+        border: Border.all(color: AppColors.border),
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: Colors.blue.shade800,
-          fontWeight: FontWeight.w600,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(category.icon, size: 14, color: AppColors.textSecondary),
+          const SizedBox(width: 6),
+          Text(
+            category.label,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ZoomablePhotoBanner extends StatelessWidget {
+  const _ZoomablePhotoBanner({
+    required this.imageUrl,
+    required this.badgeLabel,
+    required this.onTap,
+    this.height = 230,
+    this.badgeColor = AppColors.textPrimary,
+    this.badgeBg = AppColors.surface,
+    this.badgeBorder = AppColors.border,
+  });
+
+  final String imageUrl;
+  final String badgeLabel;
+  final VoidCallback onTap;
+  final double height;
+  final Color badgeColor;
+  final Color badgeBg;
+  final Color badgeBorder;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: height,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(color: AppColors.border),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.network(
+              imageUrl,
+              fit: BoxFit.cover,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return Container(
+                  color: AppColors.surfaceSubtle,
+                  alignment: Alignment.center,
+                  child: const CircularProgressIndicator(strokeWidth: 2.2),
+                );
+              },
+              errorBuilder: (_, _, _) => Container(
+                color: AppColors.surfaceSubtle,
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.broken_image_outlined,
+                  size: 44,
+                  color: AppColors.textMuted,
+                ),
+              ),
+            ),
+            Positioned(
+              top: AppSpacing.md,
+              left: AppSpacing.md,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: badgeBg.withValues(alpha: 0.94),
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                  border: Border.all(color: badgeBorder),
+                ),
+                child: Text(
+                  badgeLabel,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: badgeColor,
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              right: AppSpacing.md,
+              bottom: AppSpacing.md,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.zoom_out_map_rounded,
+                      size: 14,
+                      color: Colors.white,
+                    ),
+                    SizedBox(width: 5),
+                    Text(
+                      'Perbesar',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-/// Linimasa status berurutan: Menunggu, Diproses, Selesai/Ditolak.
-class _Timeline extends StatelessWidget {
-  const _Timeline({required this.status});
+/// Linimasa status vertikal: Menunggu Verifikasi -> Sedang Diproses -> Selesai/Ditolak.
+class _VerticalTimeline extends StatelessWidget {
+  const _VerticalTimeline({required this.status});
+
   final ComplaintStatus status;
 
-  static const steps = [
+  static const _steps = [
     ComplaintStatus.menunggu,
     ComplaintStatus.diproses,
     ComplaintStatus.selesai,
   ];
 
-  int get currentIndex {
+  int get _currentIndex {
     if (status == ComplaintStatus.ditolak) return 2;
-    return steps.indexWhere((s) => s == status);
+    return _steps.indexOf(status);
+  }
+
+  String _subtitleForStep(int index, bool isRejected) {
+    if (index == 0) return 'Laporan masuk dan menunggu pengecekan admin';
+    if (index == 1) return 'Laporan diverifikasi dan sedang ditindaklanjuti';
+    return isRejected
+        ? 'Aduan tidak dapat ditindaklanjuti oleh petugas'
+        : 'Perbaikan fasilitas telah selesai dikerjakan';
   }
 
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ...steps.asMap().entries.map((entry) {
-          final i = entry.value;
-          final done = entry.key <= currentIndex;
-          final isRejected = status == ComplaintStatus.ditolak && entry.key == 2;
-          return Row(
+      children: List.generate(_steps.length, (index) {
+        final step = _steps[index];
+        final isCompleted = index <= _currentIndex;
+        final isLast = index == _steps.length - 1;
+        final isRejected = status == ComplaintStatus.ditolak && isLast;
+
+        final activeColor = isRejected
+            ? AppColors.dangerText
+            : (index == 2 && isCompleted
+                ? AppColors.successText
+                : AppColors.primary);
+
+        final dotColor = isCompleted ? activeColor : AppColors.borderStrong;
+        final label = isRejected ? ComplaintStatus.ditolak.label : step.label;
+
+        return IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                done ? Icons.check_circle : Icons.radio_button_unchecked,
-                color: done
-                    ? (isRejected ? Colors.red : Colors.green)
-                    : Colors.grey.shade400,
-                size: 20,
+              // Indikator titik & garis vertikal
+              SizedBox(
+                width: 24,
+                child: Column(
+                  children: [
+                    Container(
+                      width: 22,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        color: isCompleted ? dotColor : AppColors.surface,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: dotColor,
+                          width: isCompleted ? 0 : 2,
+                        ),
+                      ),
+                      child: isCompleted
+                          ? Icon(
+                              isRejected
+                                  ? Icons.close_rounded
+                                  : Icons.check_rounded,
+                              size: 14,
+                              color: Colors.white,
+                            )
+                          : null,
+                    ),
+                    if (!isLast)
+                      Expanded(
+                        child: Container(
+                          width: 2,
+                          margin: const EdgeInsets.symmetric(vertical: 3),
+                          color: index < _currentIndex
+                              ? AppColors.primary
+                              : AppColors.border,
+                        ),
+                      ),
+                  ],
+                ),
               ),
-              const SizedBox(width: 10),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Text(
-                  isRejected
-                      ? ComplaintStatus.ditolak.label
-                      : i.label,
-                  style: TextStyle(
-                    fontWeight: done ? FontWeight.w600 : FontWeight.normal,
-                    color: done ? Colors.black87 : Colors.grey.shade600,
+              const SizedBox(width: AppSpacing.md),
+
+              // Teks Tahapan
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(bottom: isLast ? 0 : AppSpacing.lg),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
+                        style: textTheme.titleSmall?.copyWith(
+                          color: isCompleted
+                              ? (isRejected
+                                  ? AppColors.dangerText
+                                  : AppColors.textPrimary)
+                              : AppColors.textMuted,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _subtitleForStep(index, isRejected),
+                        style: textTheme.bodySmall?.copyWith(
+                          color: isCompleted
+                              ? AppColors.textSecondary
+                              : AppColors.textMuted,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ],
-          );
-        }),
-      ],
+          ),
+        );
+      }),
     );
   }
 }

@@ -70,6 +70,6 @@ class ComplaintProvider extends ChangeNotifier {
     return list;
   }
 
-  /// Alias Future<List<Complaint>> untuk dipakai di FutureBuilder.
+  /// Alias Future<`List<Complaint>`> untuk dipakai di FutureBuilder.
   Future<List<Complaint>> loadMineFuture(String userId) => loadMine(userId);
 }
