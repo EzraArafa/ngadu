@@ -5,16 +5,19 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/complaint.dart';
 import '../models/user.dart';
 
+import 'env_config.dart';
+
 /// Wrapper seluruh panggilan Supabase (auth, database, storage).
 ///
-/// Konfigurasi URL & anon key dibaca dari `--dart-define`:
+/// Konfigurasi URL & anon key dibaca dari `.env` di root proyek
+/// atau dari `--dart-define`:
 ///   flutter run --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...
 class SupabaseService {
   SupabaseService._();
   static const String url = String.fromEnvironment('SUPABASE_URL');
   static const String anonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
 
-  static bool get isConfigured => url.isNotEmpty && anonKey.isNotEmpty;
+  static bool get isConfigured => EnvConfig.isConfigured;
 
   static SupabaseClient get client => Supabase.instance.client;
 

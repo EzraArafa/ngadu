@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'services/env_config.dart';
 import 'providers/auth_provider.dart';
 import 'providers/complaint_provider.dart';
 import 'providers/ui_state_provider.dart';
@@ -13,9 +15,16 @@ import 'screens/complaint_detail.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Inisialisasi Supabase (URL & key lewat dart-define). Jika belum, app akan
-  // tetap jalan namun fungsionalitas backend tidak aktif.
-  // SupabaseService.isConfigured dapat dipanggil di provider bila perlu.
+
+  await initializeDateFormatting('id_ID', null);
+
+  if (EnvConfig.isConfigured) {
+    await Supabase.initialize(
+      url: EnvConfig.supabaseUrl!,
+      publishableKey: EnvConfig.supabaseAnonKey!,
+    );
+  }
+
   runApp(const NgaduApp());
 }
 
