@@ -29,7 +29,6 @@ class ComplaintCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
     final locationText = complaint.floorRoom.trim().isNotEmpty
         ? '${complaint.building} • ${complaint.floorRoom}'
         : complaint.building;
@@ -41,7 +40,7 @@ class ComplaintCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Banner Foto Bukti Kerusakan (16:9) + Chip Kategori
+            // Banner Foto Bukti Kerusakan (16:9) + Overlay Gradien
             Stack(
               children: [
                 AspectRatio(
@@ -65,7 +64,7 @@ class ComplaintCard extends StatelessWidget {
                     errorBuilder: (_, _, _) => Container(
                       color: AppColors.surfaceSubtle,
                       alignment: Alignment.center,
-                      child: Column(
+                      child: const Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
@@ -73,10 +72,11 @@ class ComplaintCard extends StatelessWidget {
                             size: 32,
                             color: AppColors.textMuted,
                           ),
-                          const SizedBox(height: 4),
+                          SizedBox(height: 4),
                           Text(
                             'Foto tidak tersedia',
-                            style: textTheme.bodySmall?.copyWith(
+                            style: TextStyle(
+                              fontSize: 11,
                               color: AppColors.textMuted,
                             ),
                           ),
@@ -85,64 +85,92 @@ class ComplaintCard extends StatelessWidget {
                     ),
                   ),
                 ),
+
+                // Gradien gelap tipis di bagian bawah foto
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.transparent,
+                          Colors.black.withValues(alpha: 0.50),
+                        ],
+                        stops: const [0.0, 0.55, 1.0],
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Chip Kategori di kiri atas foto
                 Positioned(
-                  top: AppSpacing.md,
-                  left: AppSpacing.md,
+                  top: 10,
+                  left: 10,
                   child: _CategoryPill(category: complaint.category),
+                ),
+
+                // Stempel Waktu di kiri bawah foto
+                Positioned(
+                  left: 12,
+                  bottom: 10,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.access_time_rounded,
+                        size: 12,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _formatTimestamp(complaint.createdAt),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
 
             // Konten Informasi Aduan
             Padding(
-              padding: const EdgeInsets.all(AppSpacing.lg),
+              padding: const EdgeInsets.all(14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Baris Status & Waktu Laporan
-                  Row(
-                    children: [
-                      ComplaintStatusBadge(status: complaint.status),
-                      const Spacer(),
-                      Icon(
-                        Icons.access_time_rounded,
-                        size: 14,
-                        color: AppColors.textMuted,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _formatTimestamp(complaint.createdAt),
-                        style: textTheme.bodySmall?.copyWith(
-                          color: AppColors.textSecondary,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-
-                  // Judul Aduan
+                  ComplaintStatusBadge(status: complaint.status),
+                  const SizedBox(height: 8),
                   Text(
                     complaint.title,
-                    style: textTheme.titleMedium,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                      height: 1.35,
+                    ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: AppSpacing.sm),
-
-                  // Lokasi Gedung & Ruangan
+                  const SizedBox(height: 8),
                   Row(
                     children: [
                       const Icon(
                         Icons.location_on_rounded,
-                        size: 16,
+                        size: 15,
                         color: AppColors.primary,
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 5),
                       Expanded(
                         child: Text(
                           locationText,
-                          style: textTheme.bodyMedium?.copyWith(
+                          style: const TextStyle(
+                            fontSize: 12,
                             color: AppColors.textSecondary,
                             fontWeight: FontWeight.w500,
                           ),
@@ -162,7 +190,7 @@ class ComplaintCard extends StatelessWidget {
   }
 }
 
-/// Lencana status semantik yang dapat dipakai ulang di kartu maupun layar detail.
+/// Lencana status semantik yang dipakai ulang di semua layar.
 class ComplaintStatusBadge extends StatelessWidget {
   const ComplaintStatusBadge({
     super.key,
@@ -180,28 +208,31 @@ class ComplaintStatusBadge extends StatelessWidget {
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: compact ? 8 : 10,
-        vertical: compact ? 4 : 5,
+        vertical: compact ? 3 : 5,
       ),
       decoration: BoxDecoration(
         color: style.background,
-        borderRadius: BorderRadius.circular(AppRadius.badge),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
         border: Border.all(color: style.border, width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            style.icon,
-            size: compact ? 13 : 14,
-            color: style.foreground,
+          Container(
+            width: compact ? 6 : 7,
+            height: compact ? 6 : 7,
+            decoration: BoxDecoration(
+              color: style.dot,
+              shape: BoxShape.circle,
+            ),
           ),
-          const SizedBox(width: 5),
+          const SizedBox(width: 6),
           Text(
             status.label,
             style: TextStyle(
               color: style.foreground,
               fontWeight: FontWeight.w700,
-              fontSize: compact ? 11 : 12,
+              fontSize: compact ? 10 : 11,
               letterSpacing: 0.1,
             ),
           ),
@@ -219,9 +250,9 @@ class _CategoryPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: AppColors.surface.withValues(alpha: 0.94),
+        color: AppColors.surface.withValues(alpha: 0.95),
         borderRadius: BorderRadius.circular(AppRadius.pill),
         border: Border.all(color: AppColors.border, width: 1),
       ),
@@ -230,16 +261,16 @@ class _CategoryPill extends StatelessWidget {
         children: [
           Icon(
             category.icon,
-            size: 14,
+            size: 13,
             color: AppColors.primary,
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 5),
           Text(
             category.label,
             style: const TextStyle(
               color: AppColors.textPrimary,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],

@@ -11,26 +11,32 @@ import '../theme/app_theme.dart';
 import '../widgets/complaint_card.dart';
 import 'admin_status_modal.dart';
 
-/// S-06 Detail Aduan: foto, linimasa status, catatan & bukti perbaikan,
-/// mini-map GPS, serta aksi kondisional sesuai role (Hapus / Update Status).
+/// S-06 Detail Aduan.
 class ComplaintDetailScreen extends StatelessWidget {
   const ComplaintDetailScreen({super.key});
+
+  String _shortTicketId(String id) {
+    final clean = id.replaceAll('-', '').toUpperCase();
+    if (clean.isEmpty) return 'BARU';
+    return clean.length > 6 ? clean.substring(0, 6) : clean;
+  }
+
+  String _getInitials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) return 'U';
+    if (parts.length == 1) return parts.first[0].toUpperCase();
+    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+  }
 
   @override
   Widget build(BuildContext context) {
     final complaint = context.watch<ComplaintProvider>().selected;
     final user = context.read<AuthController>().user;
-    final textTheme = Theme.of(context).textTheme;
 
     if (complaint == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Detail Aduan')),
-        body: Center(
-          child: Text(
-            'Data aduan tidak ditemukan.',
-            style: textTheme.bodyMedium,
-          ),
-        ),
+        body: const Center(child: Text('Data aduan tidak ditemukan.')),
       );
     }
 
@@ -40,287 +46,781 @@ class ComplaintDetailScreen extends StatelessWidget {
         complaint.adminNote != null && complaint.adminNote!.trim().isNotEmpty;
     final hasProofPhoto = complaint.proofPhotoUrl != null &&
         complaint.proofPhotoUrl!.trim().isNotEmpty;
-    final locationText = complaint.floorRoom.trim().isNotEmpty
-        ? '${complaint.building} • ${complaint.floorRoom}'
-        : complaint.building;
+    final isOwnReport = user != null && complaint.reporterId == user.id;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Detail Aduan'),
-        actions: [
-          if (canDelete)
-            Padding(
-              padding: const EdgeInsets.only(right: AppSpacing.sm),
-              child: IconButton(
-                icon: const Icon(
-                  Icons.delete_outline_rounded,
-                  color: AppColors.dangerText,
-                ),
-                tooltip: 'Hapus Aduan',
-                onPressed: () => _confirmDelete(context, complaint.id),
-              ),
-            ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.lg,
-          AppSpacing.lg,
-          AppSpacing.lg,
-          AppSpacing.xxl,
-        ),
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        bottom: false,
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 1. Foto Bukti Laporan (dapat diketuk untuk diperbesar)
-            _ZoomablePhotoBanner(
-              imageUrl: complaint.photoUrl,
-              badgeLabel: 'Foto Bukti Laporan',
-              onTap: () => _showFullImage(
-                context,
-                imageUrl: complaint.photoUrl,
-                title: 'Foto Bukti Laporan',
+            // Header Detail (Kembali + #ID)
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 10,
               ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-
-            // 2. Kartu Informasi Utama Aduan
-            _DetailSectionCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              decoration: const BoxDecoration(
+                color: AppColors.surface,
+                border: Border(
+                  bottom: BorderSide(color: AppColors.border, width: 1),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Wrap(
-                    spacing: AppSpacing.sm,
-                    runSpacing: AppSpacing.sm,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      ComplaintStatusBadge(status: complaint.status),
-                      _CategoryBadge(category: complaint.category),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  Text(
-                    complaint.title,
-                    style: textTheme.headlineSmall,
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-
-                  // Sorotan Lokasi Gedung & Ruangan
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.md,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.primarySoft,
-                      borderRadius: BorderRadius.circular(AppRadius.input),
-                      border: Border.all(color: AppColors.primaryBorder),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.location_on_rounded,
-                          size: 18,
-                          color: AppColors.primary,
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        Expanded(
-                          child: Text(
-                            locationText,
-                            style: textTheme.titleSmall?.copyWith(
-                              color: AppColors.primaryDark,
-                            ),
+                  InkWell(
+                    onTap: () => Navigator.pop(context),
+                    borderRadius: BorderRadius.circular(AppRadius.badge),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.chevron_left_rounded,
+                            size: 20,
+                            color: AppColors.textPrimary,
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-
-                  Text(
-                    'Deskripsi Kerusakan',
-                    style: textTheme.labelMedium?.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    complaint.description,
-                    style: textTheme.bodyLarge,
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  const Divider(),
-                  const SizedBox(height: AppSpacing.md),
-
-                  // Info Pelapor & Tanggal
-                  Row(
-                    children: [
-                      Container(
-                        width: 34,
-                        height: 34,
-                        decoration: const BoxDecoration(
-                          color: AppColors.surfaceSubtle,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.person_outline_rounded,
-                          size: 18,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.md),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              complaint.reporterName,
-                              style: textTheme.titleSmall,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            Text(
-                              'Dilaporkan ${DateFormat('dd MMM yyyy, HH:mm', 'id_ID').format(complaint.createdAt)}',
-                              style: textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-
-            // 3. Kartu Linimasa Penanganan
-            _DetailSectionCard(
-              title: 'Linimasa Penanganan',
-              icon: Icons.timeline_rounded,
-              child: _VerticalTimeline(status: complaint.status),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-
-            // 4. Kartu Tindak Lanjut Petugas (Catatan / Bukti Perbaikan)
-            if (hasAdminNote || hasProofPhoto) ...[
-              _DetailSectionCard(
-                title: 'Tindak Lanjut Petugas',
-                icon: Icons.engineering_rounded,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (hasAdminNote) ...[
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(AppSpacing.md),
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceSubtle,
-                          borderRadius: BorderRadius.circular(AppRadius.input),
-                          border: Border.all(color: AppColors.border),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Icon(
-                              Icons.notes_rounded,
-                              size: 18,
-                              color: AppColors.primary,
-                            ),
-                            const SizedBox(width: AppSpacing.sm),
-                            Expanded(
-                              child: Text(
-                                complaint.adminNote!,
-                                style: textTheme.bodyMedium?.copyWith(
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (hasProofPhoto) const SizedBox(height: AppSpacing.md),
-                    ],
-                    if (hasProofPhoto) ...[
-                      Text(
-                        'Foto Bukti Perbaikan',
-                        style: textTheme.labelMedium?.copyWith(
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.sm),
-                      _ZoomablePhotoBanner(
-                        imageUrl: complaint.proofPhotoUrl!,
-                        height: 190,
-                        badgeLabel: 'Bukti Selesai',
-                        badgeColor: AppColors.successText,
-                        badgeBg: AppColors.successBg,
-                        badgeBorder: AppColors.successBorder,
-                        onTap: () => _showFullImage(
-                          context,
-                          imageUrl: complaint.proofPhotoUrl!,
-                          title: 'Foto Bukti Perbaikan',
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-            ],
-
-            // 5. Kartu Titik Koordinat Peta GPS
-            _DetailSectionCard(
-              title: 'Titik Lokasi GPS',
-              icon: Icons.map_outlined,
-              trailing: Text(
-                '${complaint.latitude.toStringAsFixed(5)}, ${complaint.longitude.toStringAsFixed(5)}',
-                style: textTheme.bodySmall?.copyWith(
-                  fontFamily: 'monospace',
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(AppRadius.input),
-                child: SizedBox(
-                  height: 180,
-                  child: FlutterMap(
-                    options: MapOptions(
-                      initialCenter:
-                          LatLng(complaint.latitude, complaint.longitude),
-                      initialZoom: 16,
-                    ),
-                    children: [
-                      TileLayer(
-                        urlTemplate:
-                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                        userAgentPackageName: 'com.example.ngadu',
-                      ),
-                      MarkerLayer(
-                        markers: [
-                          Marker(
-                            point: LatLng(
-                              complaint.latitude,
-                              complaint.longitude,
-                            ),
-                            width: 36,
-                            height: 36,
-                            child: const Icon(
-                              Icons.location_on_rounded,
-                              color: AppColors.dangerText,
-                              size: 36,
+                          SizedBox(width: 2),
+                          Text(
+                            'Kembali',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
                             ),
                           ),
                         ],
                       ),
-                    ],
+                    ),
                   ),
+                  Text(
+                    '#${_shortTicketId(complaint.id)}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontFamily: 'monospace',
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Konten Scrollable
+            Expanded(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.only(
+                  bottom: (isAdmin || canDelete) ? 28 : 32,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Foto Bukti Laporan Penuh (16:10)
+                    AspectRatio(
+                      aspectRatio: 16 / 10,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Image.network(
+                            complaint.photoUrl,
+                            fit: BoxFit.cover,
+                            loadingBuilder: (context, child, progress) {
+                              if (progress == null) return child;
+                              return Container(
+                                color: AppColors.surfaceSubtle,
+                                alignment: Alignment.center,
+                                child: const CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              );
+                            },
+                            errorBuilder: (_, _, _) => Container(
+                              color: AppColors.surfaceSubtle,
+                              alignment: Alignment.center,
+                              child: const Icon(
+                                Icons.broken_image_outlined,
+                                size: 42,
+                                color: AppColors.textMuted,
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            right: 12,
+                            bottom: 12,
+                            child: InkWell(
+                              onTap: () => _showFullImage(
+                                context,
+                                imageUrl: complaint.photoUrl,
+                                title: 'Foto Bukti Laporan',
+                              ),
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.input),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 7,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xCC0F172A),
+                                  borderRadius:
+                                      BorderRadius.circular(AppRadius.input),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.open_in_full_rounded,
+                                      size: 13,
+                                      color: Colors.white,
+                                    ),
+                                    SizedBox(width: 6),
+                                    Text(
+                                      'Perbesar',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Kumpulan Kartu Bento
+                    Padding(
+                      padding: const EdgeInsets.all(AppSpacing.lg),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // 1. Kartu Informasi Utama
+                          Container(
+                            padding: const EdgeInsets.all(AppSpacing.lg),
+                            decoration: BoxDecoration(
+                              color: AppColors.surface,
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.card),
+                              border: Border.all(color: AppColors.border),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    ComplaintStatusBadge(
+                                      status: complaint.status,
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 5,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.surfaceSubtle,
+                                        borderRadius: BorderRadius.circular(
+                                          AppRadius.pill,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        complaint.category.label,
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.textSecondary,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                Text(
+                                  complaint.title,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.textPrimary,
+                                    height: 1.375,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+
+                                // Kotak Sorotan Lokasi Gedung & Ruangan
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primaryTint,
+                                    borderRadius: BorderRadius.circular(
+                                      AppRadius.compactCard,
+                                    ),
+                                    border: Border.all(
+                                      color: AppColors.primaryBorder,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        width: 32,
+                                        height: 32,
+                                        margin: const EdgeInsets.only(top: 2),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primary,
+                                          borderRadius: BorderRadius.circular(
+                                            AppRadius.input,
+                                          ),
+                                        ),
+                                        child: const Icon(
+                                          Icons.location_on_rounded,
+                                          size: 16,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            const Text(
+                                              'LOKASI KERUSAKAN',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w700,
+                                                letterSpacing: 0.6,
+                                                color: AppColors.secondary,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              complaint.building,
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                                color: AppColors.textPrimary,
+                                              ),
+                                            ),
+                                            if (complaint.floorRoom
+                                                .trim()
+                                                .isNotEmpty)
+                                              Text(
+                                                complaint.floorRoom,
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  color:
+                                                      AppColors.textSecondary,
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+
+                                // Deskripsi Lengkap
+                                const Text(
+                                  'DESKRIPSI KERUSAKAN',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.5,
+                                    color: AppColors.textMuted,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  complaint.description,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textSecondary,
+                                    height: 1.6,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                const Divider(),
+                                const SizedBox(height: 12),
+
+                                // Info Pelapor & Tanggal
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 28,
+                                      height: 28,
+                                      decoration: const BoxDecoration(
+                                        color: AppColors.surfaceSubtle,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: Text(
+                                        _getInitials(complaint.reporterName),
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text.rich(
+                                            TextSpan(
+                                              text: complaint.reporterName,
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                                color: AppColors.textPrimary,
+                                              ),
+                                              children: [
+                                                if (isOwnReport)
+                                                  const TextSpan(
+                                                    text: ' (Anda)',
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      color: AppColors.primary,
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          const Text(
+                                            'Pelapor Fasilitas Kampus',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: AppColors.textSecondary,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Text(
+                                      DateFormat(
+                                        'dd MMM yyyy, HH:mm',
+                                        'id_ID',
+                                      ).format(complaint.createdAt),
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                        color: AppColors.textMuted,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.cardGap),
+
+                          // 2. Kartu Tindak Lanjut Petugas Kampus
+                          if (hasAdminNote || hasProofPhoto) ...[
+                            Container(
+                              padding: const EdgeInsets.all(AppSpacing.lg),
+                              decoration: BoxDecoration(
+                                color: AppColors.surface,
+                                borderRadius:
+                                    BorderRadius.circular(AppRadius.card),
+                                border: Border.all(color: AppColors.border),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Row(
+                                    children: [
+                                      Icon(
+                                        Icons.build_rounded,
+                                        size: 14,
+                                        color: AppColors.primary,
+                                      ),
+                                      SizedBox(width: 6),
+                                      Text(
+                                        'Tindak Lanjut Petugas Kampus',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w800,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (hasAdminNote) ...[
+                                    const SizedBox(height: 12),
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.background,
+                                        borderRadius: BorderRadius.circular(
+                                          AppRadius.input,
+                                        ),
+                                        border:
+                                            Border.all(color: AppColors.border),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'CATATAN PETUGAS',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w700,
+                                              letterSpacing: 0.5,
+                                              color: AppColors.textMuted,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            complaint.adminNote!,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: AppColors.textPrimary,
+                                              height: 1.55,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                  if (hasProofPhoto) ...[
+                                    const SizedBox(height: 12),
+                                    const Text(
+                                      'FOTO BUKTI PERBAIKAN',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 0.5,
+                                        color: AppColors.successText,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(
+                                        AppRadius.compactCard,
+                                      ),
+                                      child: AspectRatio(
+                                        aspectRatio: 16 / 9,
+                                        child: Stack(
+                                          fit: StackFit.expand,
+                                          children: [
+                                            Image.network(
+                                              complaint.proofPhotoUrl!,
+                                              fit: BoxFit.cover,
+                                            ),
+                                            Positioned(
+                                              right: 8,
+                                              bottom: 8,
+                                              child: InkWell(
+                                                onTap: () => _showFullImage(
+                                                  context,
+                                                  imageUrl:
+                                                      complaint.proofPhotoUrl!,
+                                                  title: 'Foto Bukti Perbaikan',
+                                                ),
+                                                child: Container(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                    horizontal: 10,
+                                                    vertical: 5,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color:
+                                                        const Color(0xBF0F172A),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                      AppRadius.badge,
+                                                    ),
+                                                  ),
+                                                  child: const Row(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Icon(
+                                                        Icons
+                                                            .open_in_full_rounded,
+                                                        size: 12,
+                                                        color: Colors.white,
+                                                      ),
+                                                      SizedBox(width: 4),
+                                                      Text(
+                                                        'Perbesar',
+                                                        style: TextStyle(
+                                                          fontSize: 11,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                          color: Colors.white,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: AppSpacing.cardGap),
+                          ],
+
+                          // 3. Linimasa Penanganan
+                          Container(
+                            padding: const EdgeInsets.all(AppSpacing.lg),
+                            decoration: BoxDecoration(
+                              color: AppColors.surface,
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.card),
+                              border: Border.all(color: AppColors.border),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Row(
+                                  children: [
+                                    Icon(
+                                      Icons.layers_outlined,
+                                      size: 14,
+                                      color: AppColors.primary,
+                                    ),
+                                    SizedBox(width: 6),
+                                    Text(
+                                      'Linimasa Penanganan',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.textPrimary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 14),
+                                _CanvasVerticalTimeline(
+                                  status: complaint.status,
+                                  createdAt: complaint.createdAt,
+                                  adminNote: complaint.adminNote,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.cardGap),
+
+                          // 4. Kartu Titik Lokasi GPS
+                          Container(
+                            padding: const EdgeInsets.all(AppSpacing.lg),
+                            decoration: BoxDecoration(
+                              color: AppColors.surface,
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.card),
+                              border: Border.all(color: AppColors.border),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Row(
+                                  children: [
+                                    Icon(
+                                      Icons.navigation_outlined,
+                                      size: 14,
+                                      color: AppColors.secondary,
+                                    ),
+                                    SizedBox(width: 6),
+                                    Text(
+                                      'Titik Lokasi GPS',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.textPrimary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(
+                                    AppRadius.compactCard,
+                                  ),
+                                  child: SizedBox(
+                                    height: 132,
+                                    child: Stack(
+                                      children: [
+                                        FlutterMap(
+                                          options: MapOptions(
+                                            initialCenter: LatLng(
+                                              complaint.latitude,
+                                              complaint.longitude,
+                                            ),
+                                            initialZoom: 16,
+                                          ),
+                                          children: [
+                                            TileLayer(
+                                              urlTemplate:
+                                                  'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                              userAgentPackageName:
+                                                  'com.example.ngadu',
+                                            ),
+                                            MarkerLayer(
+                                              markers: [
+                                                Marker(
+                                                  point: LatLng(
+                                                    complaint.latitude,
+                                                    complaint.longitude,
+                                                  ),
+                                                  width: 36,
+                                                  height: 36,
+                                                  child: Container(
+                                                    decoration: BoxDecoration(
+                                                      color: AppColors.primary,
+                                                      shape: BoxShape.circle,
+                                                      border: Border.all(
+                                                        color: Colors.white,
+                                                        width: 3,
+                                                      ),
+                                                    ),
+                                                    child: const Icon(
+                                                      Icons.location_on_rounded,
+                                                      color: Colors.white,
+                                                      size: 16,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                        Positioned(
+                                          left: 8,
+                                          right: 8,
+                                          bottom: 8,
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 9,
+                                                  vertical: 5,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.white
+                                                      .withValues(alpha: 0.95),
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                    AppRadius.badge,
+                                                  ),
+                                                  border: Border.all(
+                                                    color: AppColors.border,
+                                                  ),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    const Icon(
+                                                      Icons.explore_outlined,
+                                                      size: 12,
+                                                      color: AppColors.primary,
+                                                    ),
+                                                    const SizedBox(width: 5),
+                                                    Text(
+                                                      '${complaint.latitude.toStringAsFixed(5)}, ${complaint.longitude.toStringAsFixed(5)}',
+                                                      style: const TextStyle(
+                                                        fontSize: 11,
+                                                        fontFamily: 'monospace',
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: AppColors
+                                                            .textPrimary,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 8,
+                                                  vertical: 5,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: AppColors.successBg
+                                                      .withValues(alpha: 0.95),
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                    AppRadius.badge,
+                                                  ),
+                                                  border: Border.all(
+                                                    color:
+                                                        AppColors.successBorder,
+                                                  ),
+                                                ),
+                                                child: const Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    CircleAvatar(
+                                                      radius: 3,
+                                                      backgroundColor:
+                                                          AppColors.successDot,
+                                                    ),
+                                                    SizedBox(width: 5),
+                                                    Text(
+                                                      'GPS Terkunci',
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: AppColors
+                                                            .successText,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
           ],
         ),
       ),
-      bottomNavigationBar: isAdmin
+
+      // Sticky Bottom Bar Kondisional
+      bottomNavigationBar: (canDelete || isAdmin)
           ? Container(
               decoration: const BoxDecoration(
                 color: AppColors.surface,
@@ -329,6 +829,7 @@ class ComplaintDetailScreen extends StatelessWidget {
                 ),
               ),
               child: SafeArea(
+                top: false,
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(
                     AppSpacing.lg,
@@ -336,11 +837,32 @@ class ComplaintDetailScreen extends StatelessWidget {
                     AppSpacing.lg,
                     AppSpacing.md,
                   ),
-                  child: FilledButton.icon(
-                    onPressed: () => _openAdminModal(context),
-                    icon: const Icon(Icons.edit_note_rounded, size: 22),
-                    label: const Text('Update Status Aduan'),
-                  ),
+                  child: isAdmin
+                      ? FilledButton.icon(
+                          onPressed: () => _openAdminModal(context),
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size.fromHeight(46),
+                          ),
+                          icon: const Icon(Icons.build_rounded, size: 16),
+                          label: const Text('Update Status Aduan'),
+                        )
+                      : OutlinedButton.icon(
+                          onPressed: () =>
+                              _confirmDelete(context, complaint.id),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(46),
+                            backgroundColor: AppColors.dangerBg,
+                            foregroundColor: AppColors.dangerText,
+                            side: const BorderSide(
+                              color: AppColors.dangerBorder,
+                            ),
+                          ),
+                          icon: const Icon(
+                            Icons.delete_outline_rounded,
+                            size: 16,
+                          ),
+                          label: const Text('Hapus Aduan'),
+                        ),
                 ),
               ),
             )
@@ -356,7 +878,7 @@ class ComplaintDetailScreen extends StatelessWidget {
     showDialog<void>(
       context: context,
       builder: (ctx) => Dialog.fullscreen(
-        backgroundColor: Colors.black,
+        backgroundColor: const Color(0xF2020617),
         child: Stack(
           children: [
             Center(
@@ -378,23 +900,23 @@ class ComplaintDetailScreen extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(AppSpacing.md),
                 child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    IconButton.filled(
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.black54,
-                        foregroundColor: Colors.white,
-                      ),
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: () => Navigator.pop(ctx),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
                     Text(
                       title,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 16,
+                        fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
+                    ),
+                    IconButton.filled(
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.white.withValues(alpha: 0.15),
+                        foregroundColor: Colors.white,
+                      ),
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                      onPressed: () => Navigator.pop(ctx),
                     ),
                   ],
                 ),
@@ -410,9 +932,12 @@ class ComplaintDetailScreen extends StatelessWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Hapus Aduan?'),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.card),
+        ),
+        title: const Text('Hapus Aduan Ini?'),
         content: const Text(
-          'Aduan yang masih menunggu verifikasi akan dihapus secara permanen.',
+          'Aduan akan dihapus secara permanen dari sistem karena masih berstatus Menunggu Verifikasi.',
         ),
         actions: [
           TextButton(
@@ -422,10 +947,10 @@ class ComplaintDetailScreen extends StatelessWidget {
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(
-              minimumSize: const Size(96, 42),
+              minimumSize: const Size(96, 40),
               backgroundColor: AppColors.dangerText,
             ),
-            child: const Text('Hapus'),
+            child: const Text('Ya, Hapus'),
           ),
         ],
       ),
@@ -460,317 +985,169 @@ class ComplaintDetailScreen extends StatelessWidget {
   }
 }
 
-class _DetailSectionCard extends StatelessWidget {
-  const _DetailSectionCard({
-    required this.child,
-    this.title,
-    this.icon,
-    this.trailing,
+class _CanvasVerticalTimeline extends StatelessWidget {
+  const _CanvasVerticalTimeline({
+    required this.status,
+    required this.createdAt,
+    this.adminNote,
   });
-
-  final Widget child;
-  final String? title;
-  final IconData? icon;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColors.border, width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (title != null) ...[
-            Row(
-              children: [
-                if (icon != null) ...[
-                  Icon(icon, size: 18, color: AppColors.primary),
-                  const SizedBox(width: AppSpacing.sm),
-                ],
-                Expanded(
-                  child: Text(title!, style: textTheme.titleSmall),
-                ),
-                ?trailing,
-              ],
-            ),
-            const SizedBox(height: AppSpacing.md),
-          ],
-          child,
-        ],
-      ),
-    );
-  }
-}
-
-class _CategoryBadge extends StatelessWidget {
-  const _CategoryBadge({required this.category});
-
-  final ComplaintCategory category;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceSubtle,
-        borderRadius: BorderRadius.circular(AppRadius.badge),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(category.icon, size: 14, color: AppColors.textSecondary),
-          const SizedBox(width: 6),
-          Text(
-            category.label,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ZoomablePhotoBanner extends StatelessWidget {
-  const _ZoomablePhotoBanner({
-    required this.imageUrl,
-    required this.badgeLabel,
-    required this.onTap,
-    this.height = 230,
-    this.badgeColor = AppColors.textPrimary,
-    this.badgeBg = AppColors.surface,
-    this.badgeBorder = AppColors.border,
-  });
-
-  final String imageUrl;
-  final String badgeLabel;
-  final VoidCallback onTap;
-  final double height;
-  final Color badgeColor;
-  final Color badgeBg;
-  final Color badgeBorder;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: height,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(color: AppColors.border),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Image.network(
-              imageUrl,
-              fit: BoxFit.cover,
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return Container(
-                  color: AppColors.surfaceSubtle,
-                  alignment: Alignment.center,
-                  child: const CircularProgressIndicator(strokeWidth: 2.2),
-                );
-              },
-              errorBuilder: (_, _, _) => Container(
-                color: AppColors.surfaceSubtle,
-                alignment: Alignment.center,
-                child: const Icon(
-                  Icons.broken_image_outlined,
-                  size: 44,
-                  color: AppColors.textMuted,
-                ),
-              ),
-            ),
-            Positioned(
-              top: AppSpacing.md,
-              left: AppSpacing.md,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: badgeBg.withValues(alpha: 0.94),
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
-                  border: Border.all(color: badgeBorder),
-                ),
-                child: Text(
-                  badgeLabel,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: badgeColor,
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              right: AppSpacing.md,
-              bottom: AppSpacing.md,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.65),
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.zoom_out_map_rounded,
-                      size: 14,
-                      color: Colors.white,
-                    ),
-                    SizedBox(width: 5),
-                    Text(
-                      'Perbesar',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Linimasa status vertikal: Menunggu Verifikasi -> Sedang Diproses -> Selesai/Ditolak.
-class _VerticalTimeline extends StatelessWidget {
-  const _VerticalTimeline({required this.status});
 
   final ComplaintStatus status;
-
-  static const _steps = [
-    ComplaintStatus.menunggu,
-    ComplaintStatus.diproses,
-    ComplaintStatus.selesai,
-  ];
-
-  int get _currentIndex {
-    if (status == ComplaintStatus.ditolak) return 2;
-    return _steps.indexOf(status);
-  }
-
-  String _subtitleForStep(int index, bool isRejected) {
-    if (index == 0) return 'Laporan masuk dan menunggu pengecekan admin';
-    if (index == 1) return 'Laporan diverifikasi dan sedang ditindaklanjuti';
-    return isRejected
-        ? 'Aduan tidak dapat ditindaklanjuti oleh petugas'
-        : 'Perbaikan fasilitas telah selesai dikerjakan';
-  }
+  final DateTime createdAt;
+  final String? adminNote;
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
+    final isRejected = status == ComplaintStatus.ditolak;
+    final createdStr = DateFormat('dd MMM yyyy, HH:mm', 'id_ID').format(createdAt);
+
+    final steps = isRejected
+        ? [
+            (
+              title: 'Menunggu Verifikasi',
+              done: true,
+              active: false,
+              rightText: createdStr,
+              note: 'Laporan diterima oleh sistem NGADU.',
+              dotColor: AppColors.warningDot,
+              ringColor: AppColors.warningBorder,
+            ),
+            (
+              title: 'Ditolak',
+              done: true,
+              active: true,
+              rightText: 'Ditutup',
+              note: (adminNote != null && adminNote!.trim().isNotEmpty)
+                  ? adminNote!
+                  : 'Aduan tidak dapat ditindaklanjuti oleh petugas.',
+              dotColor: AppColors.dangerDot,
+              ringColor: AppColors.dangerBorder,
+            ),
+          ]
+        : [
+            (
+              title: 'Menunggu Verifikasi',
+              done: true,
+              active: status == ComplaintStatus.menunggu,
+              rightText: createdStr,
+              note: 'Laporan diterima sistem dengan titik GPS terverifikasi.',
+              dotColor: AppColors.warningDot,
+              ringColor: AppColors.warningBorder,
+            ),
+            (
+              title: 'Sedang Diproses',
+              done: status == ComplaintStatus.diproses ||
+                  status == ComplaintStatus.selesai,
+              active: status == ComplaintStatus.diproses,
+              rightText: status == ComplaintStatus.menunggu
+                  ? 'Menunggu giliran'
+                  : 'Diproses',
+              note: status == ComplaintStatus.menunggu
+                  ? 'Petugas sarpras akan segera memverifikasi laporan ini.'
+                  : ((adminNote != null && adminNote!.trim().isNotEmpty)
+                      ? adminNote!
+                      : 'Ditindaklanjuti oleh tim teknisi kampus.'),
+              dotColor: AppColors.infoDot,
+              ringColor: AppColors.infoBorder,
+            ),
+            (
+              title: 'Selesai',
+              done: status == ComplaintStatus.selesai,
+              active: status == ComplaintStatus.selesai,
+              rightText:
+                  status == ComplaintStatus.selesai ? 'Tuntas' : 'Belum selesai',
+              note: status == ComplaintStatus.selesai
+                  ? 'Perbaikan fasilitas selesai dikerjakan.'
+                  : 'Menunggu konfirmasi & foto bukti perbaikan.',
+              dotColor: AppColors.successDot,
+              ringColor: AppColors.successBorder,
+            ),
+          ];
 
     return Column(
-      children: List.generate(_steps.length, (index) {
-        final step = _steps[index];
-        final isCompleted = index <= _currentIndex;
-        final isLast = index == _steps.length - 1;
-        final isRejected = status == ComplaintStatus.ditolak && isLast;
-
-        final activeColor = isRejected
-            ? AppColors.dangerText
-            : (index == 2 && isCompleted
-                ? AppColors.successText
-                : AppColors.primary);
-
-        final dotColor = isCompleted ? activeColor : AppColors.borderStrong;
-        final label = isRejected ? ComplaintStatus.ditolak.label : step.label;
+      children: List.generate(steps.length, (idx) {
+        final item = steps[idx];
+        final isLast = idx == steps.length - 1;
 
         return IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Indikator titik & garis vertikal
-              SizedBox(
-                width: 24,
-                child: Column(
-                  children: [
-                    Container(
-                      width: 22,
-                      height: 22,
-                      decoration: BoxDecoration(
-                        color: isCompleted ? dotColor : AppColors.surface,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: dotColor,
-                          width: isCompleted ? 0 : 2,
-                        ),
+              Column(
+                children: [
+                  Container(
+                    width: 14,
+                    height: 14,
+                    margin: const EdgeInsets.only(top: 2),
+                    decoration: BoxDecoration(
+                      color: item.done ? item.dotColor : AppColors.border,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: item.done
+                            ? item.ringColor
+                            : AppColors.borderStrong,
+                        width: 2,
                       ),
-                      child: isCompleted
-                          ? Icon(
-                              isRejected
-                                  ? Icons.close_rounded
-                                  : Icons.check_rounded,
-                              size: 14,
-                              color: Colors.white,
-                            )
+                      boxShadow: item.active
+                          ? [
+                              BoxShadow(
+                                color: AppColors.primary.withValues(alpha: 0.22),
+                                blurRadius: 0,
+                                spreadRadius: 4,
+                              ),
+                            ]
                           : null,
                     ),
-                    if (!isLast)
-                      Expanded(
-                        child: Container(
-                          width: 2,
-                          margin: const EdgeInsets.symmetric(vertical: 3),
-                          color: index < _currentIndex
-                              ? AppColors.primary
-                              : AppColors.border,
-                        ),
+                  ),
+                  if (!isLast)
+                    Expanded(
+                      child: Container(
+                        width: 2,
+                        margin: const EdgeInsets.symmetric(vertical: 4),
+                        color: item.done
+                            ? AppColors.primaryBorder
+                            : AppColors.border,
                       ),
-                  ],
-                ),
+                    ),
+                ],
               ),
-              const SizedBox(width: AppSpacing.md),
-
-              // Teks Tahapan
+              const SizedBox(width: 12),
               Expanded(
                 child: Padding(
-                  padding: EdgeInsets.only(bottom: isLast ? 0 : AppSpacing.lg),
+                  padding: EdgeInsets.only(bottom: isLast ? 0 : 16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        label,
-                        style: textTheme.titleSmall?.copyWith(
-                          color: isCompleted
-                              ? (isRejected
-                                  ? AppColors.dangerText
-                                  : AppColors.textPrimary)
-                              : AppColors.textMuted,
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            item.title,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: item.done
+                                  ? AppColors.textPrimary
+                                  : AppColors.textMuted,
+                            ),
+                          ),
+                          Text(
+                            item.rightText,
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        _subtitleForStep(index, isRejected),
-                        style: textTheme.bodySmall?.copyWith(
-                          color: isCompleted
+                        item.note,
+                        style: TextStyle(
+                          fontSize: 11,
+                          height: 1.5,
+                          color: item.done
                               ? AppColors.textSecondary
                               : AppColors.textMuted,
                         ),

@@ -10,8 +10,7 @@ import '../providers/complaint_provider.dart';
 import '../services/supabase_service.dart';
 import '../theme/app_theme.dart';
 
-/// S-07 Modal Update Status (khusus Admin): pilih status, foto bukti
-/// (wajib jika Selesai), catatan petugas, lalu simpan.
+/// S-07 Bottom Sheet Modal Update Status (khusus Admin — Grid 2x2).
 class AdminStatusModal extends StatefulWidget {
   const AdminStatusModal({super.key});
 
@@ -25,6 +24,16 @@ class _AdminStatusModalState extends State<AdminStatusModal> {
   final _noteController = TextEditingController();
   bool _saving = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    final selected = context.read<ComplaintProvider>().selected;
+    if (selected != null) {
+      _status = selected.status;
+      _noteController.text = selected.adminNote ?? '';
+    }
+  }
 
   @override
   void dispose() {
@@ -51,14 +60,17 @@ class _AdminStatusModalState extends State<AdminStatusModal> {
     }
   }
 
+  String _shortTicketId(String id) {
+    final clean = id.replaceAll('-', '').toUpperCase();
+    if (clean.isEmpty) return 'BARU';
+    return clean.length > 6 ? clean.substring(0, 6) : clean;
+  }
+
   bool get _proofRequired => _status == ComplaintStatus.selesai;
   bool get _canSave => !_saving && (!_proofRequired || _proofPhoto != null);
 
   Future<void> _save() async {
-    if (!_canSave) {
-      setState(() => _error = 'Foto bukti wajib diunggah untuk status Selesai.');
-      return;
-    }
+    if (!_canSave) return;
 
     final complaint = context.read<ComplaintProvider>().selected;
     final user = context.read<AuthController>().user;
@@ -89,7 +101,9 @@ class _AdminStatusModalState extends State<AdminStatusModal> {
       if (!mounted) return;
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Status aduan berhasil diperbarui.')),
+        SnackBar(
+          content: Text('Status aduan diperbarui menjadi "${_status.label}"'),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -101,299 +115,316 @@ class _AdminStatusModalState extends State<AdminStatusModal> {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
+    final complaint = context.read<ComplaintProvider>().selected;
+    final ticketId = _shortTicketId(complaint?.id ?? '');
 
     return Padding(
       padding: EdgeInsets.only(
-        left: AppSpacing.xl,
-        right: AppSpacing.xl,
-        top: AppSpacing.xl,
+        left: AppSpacing.lg,
+        right: AppSpacing.lg,
+        top: 4,
         bottom: MediaQuery.viewInsetsOf(context).bottom + AppSpacing.xl,
       ),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Header Modal
-              Row(
-                children: [
-                  Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: AppColors.primarySoft,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppColors.primaryBorder),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Update Status Aduan',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Tiket #$ticketId • Mode Petugas Kampus',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+                InkWell(
+                  onTap: _saving ? null : () => Navigator.pop(context),
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: const BoxDecoration(
+                      color: AppColors.surfaceSubtle,
+                      shape: BoxShape.circle,
                     ),
                     child: const Icon(
-                      Icons.admin_panel_settings_rounded,
-                      size: 20,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.md),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Tindak Lanjuti Aduan',
-                          style: textTheme.titleMedium,
-                        ),
-                        Text(
-                          'Perbarui progres penanganan fasilitas',
-                          style: textTheme.bodySmall,
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(
                       Icons.close_rounded,
+                      size: 16,
                       color: AppColors.textSecondary,
                     ),
-                    tooltip: 'Tutup',
-                    onPressed: _saving ? null : () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.md),
-              const Divider(),
-              const SizedBox(height: AppSpacing.lg),
-
-              // Pilihan Status Penanganan
-              Text(
-                'Status Penanganan *',
-                style: textTheme.titleSmall,
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              ...ComplaintStatus.values.map(
-                (s) => Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                  child: _StatusOptionTile(
-                    status: s,
-                    selected: _status == s,
-                    onTap: _saving
-                        ? null
-                        : () => setState(() {
-                              _status = s;
-                              _error = null;
-                            }),
                   ),
                 ),
-              ),
-              const SizedBox(height: AppSpacing.md),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.lg),
 
-              // Foto Bukti Perbaikan
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Foto Bukti Perbaikan',
-                      style: textTheme.titleSmall,
-                    ),
+            const Text(
+              'Pilih Status Terbaru',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+              childAspectRatio: 2.8,
+              children: ComplaintStatus.values.map((s) {
+                return _GridStatusCard(
+                  status: s,
+                  selected: _status == s,
+                  onTap: _saving
+                      ? null
+                      : () => setState(() {
+                            _status = s;
+                            _error = null;
+                          }),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Foto Bukti Perbaikan',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textSecondary,
                   ),
+                ),
+                if (_proofRequired)
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
-                      vertical: 3,
+                      vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: _proofRequired
-                          ? AppColors.warningBg
-                          : AppColors.surfaceSubtle,
-                      borderRadius: BorderRadius.circular(AppRadius.badge),
-                      border: Border.all(
-                        color: _proofRequired
-                            ? AppColors.warningBorder
-                            : AppColors.border,
-                      ),
+                      color: AppColors.dangerBg,
+                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                      border: Border.all(color: AppColors.dangerBorder),
                     ),
-                    child: Text(
-                      _proofRequired ? 'Wajib untuk Selesai' : 'Opsional',
-                      style: textTheme.labelSmall?.copyWith(
-                        color: _proofRequired
-                            ? AppColors.warningText
-                            : AppColors.textSecondary,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              _buildProofPicker(textTheme),
-              const SizedBox(height: AppSpacing.lg),
-
-              // Catatan Petugas
-              TextField(
-                controller: _noteController,
-                enabled: !_saving,
-                maxLines: 3,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Catatan Petugas / Keterangan',
-                  hintText:
-                      'Tuliskan tindakan perbaikan atau alasan penolakan...',
-                  alignLabelWithHint: true,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-
-              // Banner Error
-              if (_error != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  decoration: BoxDecoration(
-                    color: AppColors.dangerBg,
-                    borderRadius: BorderRadius.circular(AppRadius.input),
-                    border: Border.all(color: AppColors.dangerBorder),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(
-                        Icons.error_outline_rounded,
-                        size: 18,
+                    child: const Text(
+                      'WAJIB untuk Selesai',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
                         color: AppColors.dangerText,
                       ),
-                      const SizedBox(width: AppSpacing.sm),
-                      Expanded(
-                        child: Text(
-                          _error!,
-                          style: textTheme.bodySmall?.copyWith(
-                            color: AppColors.dangerText,
-                            fontWeight: FontWeight.w500,
+                    ),
+                  )
+                else
+                  const Text(
+                    'Opsional',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+
+            if (_proofPhoto != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.compactCard),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.file(_proofPhoto!, fit: BoxFit.cover),
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: InkWell(
+                          onTap: _saving
+                              ? null
+                              : () => setState(() => _proofPhoto = null),
+                          child: Container(
+                            width: 28,
+                            height: 28,
+                            decoration: const BoxDecoration(
+                              color: Color(0xBF0F172A),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.close_rounded,
+                              size: 14,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: 8,
+                        bottom: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.successDot,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'Bukti Terlampir',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: AppSpacing.md),
-              ],
-
-              // Tombol Simpan
-              FilledButton.icon(
-                onPressed: _canSave ? _save : null,
-                icon: _saving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.check_circle_outline_rounded, size: 19),
-                label: Text(_saving ? 'Menyimpan...' : 'Simpan Perubahan'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildProofPicker(TextTheme textTheme) {
-    if (_proofPhoto != null) {
-      return Stack(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadius.input),
-            child: Image.file(
-              _proofPhoto!,
-              height: 156,
-              width: double.infinity,
-              fit: BoxFit.cover,
-            ),
-          ),
-          Positioned(
-            right: AppSpacing.sm,
-            bottom: AppSpacing.sm,
-            child: Material(
-              color: AppColors.surface.withValues(alpha: 0.94),
-              borderRadius: BorderRadius.circular(AppRadius.pill),
-              child: InkWell(
+              )
+            else
+              InkWell(
                 onTap: _saving ? null : _pickProof,
-                borderRadius: BorderRadius.circular(AppRadius.pill),
+                borderRadius: BorderRadius.circular(AppRadius.compactCard),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 7,
-                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 18),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
-                    border: Border.all(color: AppColors.border),
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(AppRadius.compactCard),
+                    border: Border.all(
+                      color: _proofRequired
+                          ? AppColors.primaryBorder
+                          : AppColors.borderStrong,
+                      width: 1.2,
+                    ),
                   ),
-                  child: Row(
+                  child: const Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
-                        Icons.photo_library_rounded,
-                        size: 15,
+                      Icon(
+                        Icons.image_outlined,
+                        size: 22,
                         color: AppColors.primary,
                       ),
-                      const SizedBox(width: 6),
+                      SizedBox(height: 6),
                       Text(
-                        'Ganti Foto',
-                        style: textTheme.labelMedium?.copyWith(
-                          color: AppColors.primary,
+                        'Pilih Foto Bukti Perbaikan',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
                         ),
                       ),
                     ],
                   ),
                 ),
               ),
-            ),
-          ),
-        ],
-      );
-    }
 
-    return InkWell(
-      onTap: _saving ? null : _pickProof,
-      borderRadius: BorderRadius.circular(AppRadius.input),
-      child: Container(
-        height: 124,
-        padding: const EdgeInsets.all(AppSpacing.md),
-        decoration: BoxDecoration(
-          color: _proofRequired
-              ? AppColors.primarySoft.withValues(alpha: 0.45)
-              : AppColors.surfaceSubtle,
-          borderRadius: BorderRadius.circular(AppRadius.input),
-          border: Border.all(
-            color:
-                _proofRequired ? AppColors.primaryBorder : AppColors.border,
-            width: 1.2,
-          ),
-        ),
-        alignment: Alignment.center,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.add_photo_alternate_rounded,
-              size: 32,
-              color: _proofRequired
-                  ? AppColors.primary
-                  : AppColors.textSecondary,
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Pilih Foto Bukti dari Galeri',
-              style: textTheme.titleSmall?.copyWith(
-                color: _proofRequired
-                    ? AppColors.primaryDark
-                    : AppColors.textPrimary,
+            if (_proofRequired && _proofPhoto == null) ...[
+              const SizedBox(height: 6),
+              const Row(
+                children: [
+                  Icon(
+                    Icons.error_outline_rounded,
+                    size: 13,
+                    color: AppColors.dangerText,
+                  ),
+                  SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      'Pilih foto bukti perbaikan terlebih dahulu untuk menandai Selesai.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.dangerText,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: AppSpacing.lg),
+
+            const Text(
+              'Catatan Petugas',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textSecondary,
               ),
             ),
-            const SizedBox(height: 2),
-            Text(
-              'Format JPG/PNG, maks. lebar 1600px',
-              style: textTheme.bodySmall,
+            const SizedBox(height: 6),
+            TextField(
+              controller: _noteController,
+              enabled: !_saving,
+              maxLines: 3,
+              textCapitalization: TextCapitalization.sentences,
+              style: const TextStyle(fontSize: 12),
+              decoration: const InputDecoration(
+                hintText: 'Tuliskan progres perbaikan atau alasan penolakan...',
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+
+            if (_error != null) ...[
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text(
+                  _error!,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.dangerText,
+                  ),
+                ),
+              ),
+            ],
+
+            FilledButton.icon(
+              onPressed: _canSave ? _save : null,
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(46),
+                disabledBackgroundColor: AppColors.border,
+                disabledForegroundColor: AppColors.textMuted,
+              ),
+              icon: _saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.check_circle_outline_rounded, size: 16),
+              label: Text(
+                _saving ? 'Menyimpan...' : 'Simpan Perubahan Status',
+              ),
             ),
           ],
         ),
@@ -402,8 +433,8 @@ class _AdminStatusModalState extends State<AdminStatusModal> {
   }
 }
 
-class _StatusOptionTile extends StatelessWidget {
-  const _StatusOptionTile({
+class _GridStatusCard extends StatelessWidget {
+  const _GridStatusCard({
     required this.status,
     required this.selected,
     required this.onTap,
@@ -419,53 +450,44 @@ class _StatusOptionTile extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.input),
+      borderRadius: BorderRadius.circular(AppRadius.compactCard),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md,
-          vertical: 11,
-        ),
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? style.background : AppColors.surface,
-          borderRadius: BorderRadius.circular(AppRadius.input),
+          color: selected
+              ? AppColors.primaryTint.withValues(alpha: 0.45)
+              : AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.compactCard),
           border: Border.all(
-            color: selected ? style.foreground : AppColors.border,
-            width: selected ? 1.5 : 1,
+            color: selected ? AppColors.primary : AppColors.border,
+            width: selected ? 1.8 : 1,
           ),
         ),
         child: Row(
           children: [
             Container(
-              width: 30,
-              height: 30,
+              width: 28,
+              height: 28,
               decoration: BoxDecoration(
-                color: selected ? style.foreground : style.background,
-                borderRadius: BorderRadius.circular(8),
+                color: style.background,
+                borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(
-                style.icon,
-                size: 16,
-                color: selected ? Colors.white : style.foreground,
-              ),
+              child: Icon(style.icon, size: 14, color: style.foreground),
             ),
-            const SizedBox(width: AppSpacing.md),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
                 status.label,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  color: selected ? style.foreground : AppColors.textPrimary,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                  height: 1.2,
                 ),
               ),
-            ),
-            Icon(
-              selected
-                  ? Icons.radio_button_checked_rounded
-                  : Icons.radio_button_unchecked_rounded,
-              size: 20,
-              color: selected ? style.foreground : AppColors.textMuted,
             ),
           ],
         ),
